@@ -9,7 +9,7 @@ const wpApiUrl = process.env.WP_API_BULK;
 
 async function extractStockData() {
   const browser = await puppeteer.launch({
-    headless: false,
+    headless: true,
     defaultViewport: { width: 1200, height: 800 }
   });
 

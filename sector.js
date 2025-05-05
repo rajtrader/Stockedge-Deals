@@ -1,12 +1,17 @@
 import puppeteer from 'puppeteer';
+import axios from 'axios'; 
+import dotenv from 'dotenv';
 
-// Helper function to replace page.waitForTimeout()
+dotenv.config();
+
+const wpApiUrl = process.env.WP_API_SECTOR; 
+
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function extractSectorAndChangePercentage(url) { 
   console.log('Launching browser...');
   const browser = await puppeteer.launch({
-    headless: false, // Set to true for production
+    headless: true,
     defaultViewport: { width: 1200, height: 800 },
     args: ['--start-maximized']
   });
@@ -30,7 +35,6 @@ async function extractSectorAndChangePercentage(url) {
         try {
           const industryText = item.querySelector('ion-text.normal-font')?.textContent?.trim();
           const stockCountElement = item.querySelector('ion-text.ion-color-se-grey-medium');
-       
           
           let changePercent = '';
           const changePercentElement = item.querySelector('se-price-change-percent-label ion-text');
@@ -41,7 +45,6 @@ async function extractSectorAndChangePercentage(url) {
           data.push({
             index: index + 1,
             industry: industryText,
-            
             changePercent: changePercent
           });
         } catch (error) {
@@ -145,13 +148,46 @@ async function main() {
     console.table(data.map(item => ({
       '#': item.index,
       'Sector/Industry': item.industry,
- 
       'Change %': item.changePercent
     })));
     
+    for (const item of data) {
+      // Fixed field names to match what the API expects
+      const wpData = { 
+        industry: item.industry,
+        change_percent: item.changePercent // Fixed to use changePercent from extracted data
+      };
+      
+      const stored = await storeInWordPress(wpData);
+      if (stored) {
+        console.log(`Successfully stored "${item.industry}" in WordPress.`);
+      } else if (stored?.duplicate) {
+        console.log(`Skipped duplicate: "${item.industry}" `);
+      } else {
+        console.log(`Failed to store "${item.industry}" in WordPress.`);
+      }
+    }
+
     return data;
+    
   } catch (error) {
     console.error('Failed to extract data:', error);
+  }
+}
+
+async function storeInWordPress(data) {
+  try {
+    console.log('Sending to WordPress API:', data);
+    const response = await axios.post(wpApiUrl, {
+      industry: data.industry,
+      change_percent: data.change_percent
+    });
+
+    console.log('Stored in WordPress:', response.data);
+    return response.data.status === 'duplicate' ? { duplicate: true } : true;
+  } catch (error) {
+    console.error('WP API Error:', error.response?.data || error.message);
+    return false;
   }
 }
 
