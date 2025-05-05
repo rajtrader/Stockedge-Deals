@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const wpApiUrl = process.env.WP_API_SECTOR; 
+const wpApiUrl = 'https://profitbooking.in/wp-json/scraper/v1/stockedge-sector-data'; 
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 

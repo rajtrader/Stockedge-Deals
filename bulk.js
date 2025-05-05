@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const wpApiUrl = process.env.WP_API_BULK; 
+const wpApiUrl = "https://profitbooking.in/wp-json/scraper/v1/stockedge-bulk-deals"; 
 
 async function scrape() {
   const browser = await puppeteer.launch({
