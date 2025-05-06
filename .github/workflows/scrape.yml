@@ -1,13 +1,11 @@
 name: Run Stock News Scraper
 
 on:
-  schedule:
-    - cron: ""  # Every day at 11:00 UTC
   workflow_dispatch:
 
 jobs:
   scrape:
-    runs-on: ubunt-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
