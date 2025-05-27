@@ -11,6 +11,8 @@ const wpApiUrl = 'https://profitbooking.in/wp-json/scraper/v1/stockedge-results'
 async function extractStockData() {
   // Launch the browser
   const browser = await puppeteer.launch({
+      executablePath: 'C:\\Users\\a\\.cache\\puppeteer\\chrome\\win64-135.0.7049.114\\chrome-win64\\chrome.exe',
+
     headless: true, 
     timeout: 0,
     args: [

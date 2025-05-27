@@ -15,6 +15,8 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function extractSectorAndChangePercentage(url) { 
   console.log('Launching browser...');
   const browser = await puppeteer.launch({
+      executablePath: 'C:\\Users\\a\\.cache\\puppeteer\\chrome\\win64-135.0.7049.114\\chrome-win64\\chrome.exe',
+
     headless: true,
     defaultViewport: { width: 1200, height: 800 },
      timeout: 0,
