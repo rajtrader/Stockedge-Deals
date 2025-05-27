@@ -1,4 +1,8 @@
-import puppeteer from 'puppeteer';
+
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+
+puppeteer.use(StealthPlugin());
 import axios from 'axios'; 
 import dotenv from 'dotenv';
 
@@ -10,7 +14,20 @@ const wpApiUrl = 'https://profitbooking.in/wp-json/scraper/v1/stockedge-bulk-dea
 async function scrape() {
   const browser = await puppeteer.launch({
     headless: true,
-    defaultViewport: { width: 1920, height: 1080 }
+    defaultViewport: { width: 1920, height: 1080 },
+  
+    timeout: 0,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--single-process',
+      '--disable-extensions',
+      '--disable-blink-features=AutomationControlled', 
+    '--window-size=1920,1080'
+    ],
+    ignoreHTTPSErrors: true,
   });
 
   try {

@@ -1,4 +1,8 @@
-import puppeteer from 'puppeteer';
+
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+
+puppeteer.use(StealthPlugin());
 import axios from 'axios';
 
 // Set your WordPress REST API endpoint here
@@ -7,7 +11,19 @@ const wpApiUrl = 'https://profitbooking.in/wp-json/scraper/v1/stockedge-results'
 async function extractStockData() {
   // Launch the browser
   const browser = await puppeteer.launch({
-    headless: true, // Set to false if you want to see the browser in action
+    headless: true,
+     timeout: 0,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--single-process',
+      '--disable-extensions',
+      '--disable-blink-features=AutomationControlled', 
+    '--window-size=1920,1080'
+    ],
+    ignoreHTTPSErrors: true,
   });
   const page = await browser.newPage();
   

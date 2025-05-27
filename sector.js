@@ -1,4 +1,8 @@
-import puppeteer from 'puppeteer';
+
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+
+puppeteer.use(StealthPlugin());
 import axios from 'axios'; 
 import dotenv from 'dotenv';
 
@@ -13,7 +17,19 @@ async function extractSectorAndChangePercentage(url) {
   const browser = await puppeteer.launch({
     headless: true,
     defaultViewport: { width: 1200, height: 800 },
-    args: ['--start-maximized']
+     timeout: 0,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--single-process',
+      '--disable-extensions',
+      '--disable-blink-features=AutomationControlled', 
+    '--window-size=1920,1080',
+    '--start-maximized'
+    ],
+    ignoreHTTPSErrors: true,
   });
   
   try {
