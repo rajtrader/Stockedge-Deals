@@ -41,9 +41,7 @@ jobs:
       - name: Install project dependencies
         run: npm install
 
-      - name: Install Chrome for Puppeteer
-        run: npx puppeteer browsers install chrome
-        
+
       - name: Run scraper
         run: |
           node bulk.js
