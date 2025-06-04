@@ -1,250 +1,116 @@
-
 import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 puppeteer.use(StealthPlugin());
-import axios from 'axios'; 
-import dotenv from 'dotenv';
 
-
-
-
-const wpApiUrl = 'https://profitbooking.in/wp-json/scraper/v1/stockedge-bulk-deals'; 
-
-async function scrape() {
-  const browser = await puppeteer.launch({
-    executablePath: 'C:\\Users\\a\\.cache\\puppeteer\\chrome\\win64-135.0.7049.114\\chrome-win64\\chrome.exe',
-
-    headless: true,
-    defaultViewport: { width: 1920, height: 1080 },
-  
-    timeout: 0,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--single-process',
-      '--disable-extensions',
-      '--disable-blink-features=AutomationControlled', 
-    '--window-size=1920,1080'
-    ],
-    ignoreHTTPSErrors: true,
-  });
-
-  try {
-    const page = await browser.newPage();
-    console.log('Navigating to StockEdge Deals page...');
-    await page.goto('https://web.stockedge.com/deals?section=block-deals', { 
-      waitUntil: 'networkidle2',
-      timeout: 60000
+async function scrapeSectors() {
+    console.log('Starting sector data extraction...');
+    const browser = await puppeteer.launch({
+        headless: false,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--start-maximized'] // Maximize window for better visibility
     });
-    
-    // Get the first date
-    const firstDate = await page.evaluate(() => {
-      const divider = document.querySelector('ion-item-divider[color="divider-header"]');
-      const dateElement = divider ? divider.querySelector('se-date-label ion-text') : null;
-      return dateElement ? dateElement.textContent.trim() : 'Unknown date';
-    });
-    
-    console.log(`First date found: ${firstDate}`);
-    
-    let allTransactions = [];
-    let foundSecondDate = false;
-    let scrollAttempts = 0;
-    const maxScrollAttempts = 7;
-    
-    // Function to check if we've found a second date
-    const checkForSecondDate = async () => {
-      return await page.evaluate((firstDate) => {
-        const dividers = document.querySelectorAll('ion-item-divider[color="divider-header"]');
-        let foundFirstDate = false;
-        
-        for (const divider of dividers) {
-          const dateElement = divider.querySelector('se-date-label ion-text');
-          const currentDate = dateElement ? dateElement.textContent.trim() : '';
-          
-          if (currentDate === firstDate) {
-            foundFirstDate = true;
-            continue;
-          }
-          
-          if (foundFirstDate && currentDate && currentDate !== firstDate) {
-            console.log(`Found second date: ${currentDate}`);
-            return true;
-          }
-        }
-        return false;
-      }, firstDate);
-    };
-    
-    while (!foundSecondDate && scrollAttempts < maxScrollAttempts) {
-      scrollAttempts++;
-      
-      // Extract current visible transactions
-      const currentTransactions = await page.evaluate((firstDate) => {
-        const transactions = [];
-        // Get all items in order
-        const allItems = Array.from(document.querySelectorAll('ion-item[role="listitem"], ion-item-divider[color="divider-header"]'));
-        let currentDate = firstDate;
-        let lastDividerIndex = -1;
-        let foundSecondDate = false;
-        
-        // Process items in order
-        for (let i = 0; i < allItems.length; i++) {
-          const item = allItems[i];
-          
-          // If this is a divider, update the current date
-          if (item.tagName.toLowerCase() === 'ion-item-divider') {
-            const dateElement = item.querySelector('se-date-label ion-text');
-            const newDate = dateElement ? dateElement.textContent.trim() : currentDate;
-            
-            // If we find a new date, mark it but continue processing until next divider
-            if (newDate !== firstDate) {
-              foundSecondDate = true;
-              currentDate = newDate;
-              continue;
-            }
-            
-            currentDate = newDate;
-            lastDividerIndex = i;
-            continue;
-          }
-          
-          // Process list items
-          const row = item.querySelector('ion-grid ion-row');
-          if (!row) continue;
-          
-          const investorElement = row.querySelector('ion-col:nth-child(2) ion-text.normal-font');
-          const statusElement = row.querySelector('ion-col:nth-child(3) ion-chip ion-text');
 
-          const stockNameElement = row.querySelector('ion-col:nth-child(4)');
-          const quantityElement = row.querySelector('ion-col:nth-child(6)');
+    try {
+        console.log('Launching browser...');
+        const page = await browser.newPage();
+        console.log('Opening new page...');
 
-          // Only add transactions that appear before the second date divider
-          if (!foundSecondDate) {
-            transactions.push({
-              date: currentDate,
-              investor: investorElement ? investorElement.textContent.trim() : '',
-              status: statusElement ? statusElement.textContent.trim() : 'Unknown',
-              stockName: stockNameElement ? stockNameElement.textContent.trim() : '',
-              quantity: quantityElement ? quantityElement.textContent.trim() : '',
-             
-            });
-          }
-        }
-        
-        return transactions;
-      }, firstDate);
-      
-      // Add new transactions to our collection
-      const uniqueTransactions = new Map();
-      
-      // Add existing transactions to the map
-      allTransactions.forEach(t => {
-        const key = `${t.investor}-${t.stockName}-${t.quantity}-${t.price}`;
-        uniqueTransactions.set(key, t);
-      });
-      
-      // Add new transactions, skipping duplicates
-      currentTransactions.forEach(t => {
-        const key = `${t.investor}-${t.stockName}-${t.quantity}-${t.price}`;
-        if (!uniqueTransactions.has(key)) {
-          uniqueTransactions.set(key, t);
-        }
-      });
-      
-      // Convert back to array
-      allTransactions = Array.from(uniqueTransactions.values());
-      
-      console.log(`After scroll ${scrollAttempts}: Found ${allTransactions.length} unique transactions`);
-      
-      // Check for second date using our improved function
-      foundSecondDate = await checkForSecondDate();
-      
-      if (foundSecondDate) {
-        console.log(`Found second date divider after ${scrollAttempts} scrolls`);
-        break;
-      }
-      
-      // Scroll using Puppeteer's scrollIntoView
-      await page.evaluate(() => {
-        const lastItem = document.querySelector('ion-item[role="listitem"]:last-child');
-        if (lastItem) {
-          lastItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }
-      });
-      
-      // Wait for network to be idle and content to load
-      await page.waitForFunction(() => {
-        return new Promise(resolve => {
-          const observer = new MutationObserver(() => {
-            resolve(true);
-          });
-          observer.observe(document.body, { childList: true, subtree: true });
-          setTimeout(() => resolve(false), 2000);
+        // Set a larger viewport to ensure more content is visible initially
+        await page.setViewport({ width: 1366, height: 768 });
+
+        await page.goto('https://web.stockedge.com/sectors', {
+            waitUntil: 'networkidle2', // Wait until network is idle
+            timeout: 60000
         });
-      });
-    }
-    
-    if (!foundSecondDate) {
-      console.log('Reached maximum scroll attempts without finding a second date');
-    }
-    
-    console.log(`Total unique transactions extracted: ${allTransactions.length}`);
-    console.log(allTransactions);
-    
-    // FIXED: Loop through transactions correctly
-    for (const item of allTransactions) {
-      const wpData = { 
-        date: item.date,
-        investor: item.investor,
-        status: item.status,
 
-        stockName: item.stockName,
-        quantity: item.quantity,
-      
-      };
-      
-      const stored = await storeInWordPress(wpData);
-      if (stored) {
-        console.log(`Successfully stored "${item.stockName}" in WordPress.`);
-      } else if (stored?.duplicate) {
-        console.log(`Skipped duplicate: "${item.stockName}"`);
-      } else {
-        console.log(`Failed to store "${item.stockName}" in WordPress.`);
-      }
+        console.log('Starting to scroll and load all content...');
+
+        let lastHeight = 0;
+        let currentHeight = await page.evaluate(() => document.body.scrollHeight);
+        let scrollAttempts = 0;
+        const maxScrollAttempts = 20; // Increased max attempts
+        let itemsCount = 0;
+
+        const autoScroll = async () => {
+            while (scrollAttempts < maxScrollAttempts) {
+                scrollAttempts++;
+                lastHeight = currentHeight;
+
+                // Scroll to the bottom of the page
+                await page.evaluate(() => {
+                    window.scrollTo(0, document.body.scrollHeight);
+                });
+
+                // Wait for a short period to allow content to load
+                await page.waitForTimeout(2000); // Increased wait time slightly
+
+                currentHeight = await page.evaluate(() => document.body.scrollHeight);
+                console.log(`Scroll attempt ${scrollAttempts}: Height ${lastHeight} -> ${currentHeight}`);
+
+                // Check if the scroll actually moved the scrollbar
+                if (currentHeight === lastHeight) {
+                    console.log('No new content loaded after scroll (height unchanged).');
+                    // Before breaking, try a small scroll to trigger lazy loading if any
+                    await page.evaluate(() => window.scrollBy(0, 100)); // Scroll down a little bit more
+                    await page.waitForTimeout(1000);
+                    currentHeight = await page.evaluate(() => document.body.scrollHeight);
+                    if (currentHeight === lastHeight) {
+                        console.log('Confirmed: No more content to load. Scrolling complete.');
+                        break; // No more content to load
+                    }
+                }
+
+                // Check if new items have appeared
+                const newItemsCount = await page.evaluate(() =>
+                    document.querySelectorAll('.sector-item').length
+                );
+
+                if (newItemsCount > itemsCount) {
+                    itemsCount = newItemsCount;
+                    console.log(`Now have ${itemsCount} items loaded`);
+                    scrollAttempts = 0; // Reset scroll attempts if new items were found, to continue loading
+                } else if (newItemsCount === itemsCount && currentHeight === lastHeight) {
+                    console.log('No new items and no scroll progress. Assuming all content loaded.');
+                    break;
+                }
+            }
+        };
+
+        await autoScroll();
+
+        console.log('Waiting for final content to stabilize...');
+        await page.waitForTimeout(3000); // Give it a bit more time after scrolling stops
+
+        console.log('Extracting data from all loaded items...');
+        const sectors = await page.evaluate(() => {
+            const items = Array.from(document.querySelectorAll('.sector-item'));
+            return items.map(item => {
+                return {
+                    name: item.querySelector('.sector-name')?.textContent.trim() || '',
+                    change: item.querySelector('.sector-change')?.textContent.trim() || '',
+                    volume: item.querySelector('.sector-volume')?.textContent.trim() || ''
+                };
+            });
+        });
+
+        console.log(`Successfully extracted ${sectors.length} sector items`);
+
+        // Removed the conditional "additional scroll" as autoScroll should handle it.
+        // The autoScroll function with reset of scrollAttempts is more robust.
+
+        return sectors;
+
+    } catch (error) {
+        console.error('Error during scraping:', error);
+        throw error;
+    } finally {
+        await browser.close();
+        console.log('Browser closed.');
     }
-    
-    return allTransactions;
-  }
-  catch (error) {
-    console.error('Error during scraping:', error);
-  }
-  finally {
-    await browser.close();
-  }
 }
 
-async function storeInWordPress(data) {
-  try {
-    const response = await axios.post(wpApiUrl, {
-      date: data.date,
-      investor: data.investor,
-      status: data.status,
-      stockName: data.stockName,
-      quantity: data.quantity,
-
-    });
-
-    console.log('Stored in WordPress:', response.data);
-    return true;
-  } catch (error) {
-    console.error('WP API Error:', error.response?.data || error.message);
-    return false;
-  }
-}
-
-scrape();
-
-export default scrape;
+scrapeSectors().then(results => {
+    console.log('Final results:', results);
+    console.log(`Total sectors extracted: ${results.length}`);
+}).catch(error => {
+    console.error('Scraping failed:', error);
+});

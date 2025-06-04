@@ -1,4 +1,3 @@
-
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 
@@ -15,11 +14,9 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function extractSectorAndChangePercentage(url) { 
   console.log('Launching browser...');
   const browser = await puppeteer.launch({
-      executablePath: 'C:\\Users\\a\\.cache\\puppeteer\\chrome\\win64-135.0.7049.114\\chrome-win64\\chrome.exe',
-
-    headless: true,
+    headless: false,
     defaultViewport: { width: 1200, height: 800 },
-     timeout: 0,
+    timeout: 0,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -28,8 +25,8 @@ async function extractSectorAndChangePercentage(url) {
       '--single-process',
       '--disable-extensions',
       '--disable-blink-features=AutomationControlled', 
-    '--window-size=1920,1080',
-    '--start-maximized'
+      '--window-size=1920,1080',
+      '--start-maximized'
     ],
     ignoreHTTPSErrors: true,
   });
@@ -41,13 +38,56 @@ async function extractSectorAndChangePercentage(url) {
     console.log(`Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
     
-    console.log('Starting infinite scroll...');
-    await improvedInfiniteScroll(page);
+    // Enhanced scrolling function to load all content
+    console.log('Starting to scroll and load all content...');
+    const scrollToLoadAllContent = async () => {
+      let previousHeight = 0;
+      let scrollAttempts = 0;
+      const maxScrollAttempts = 50; // Prevent infinite loops
+      
+      while (scrollAttempts < maxScrollAttempts) {
+        // Scroll to bottom
+        await page.evaluate(() => {
+          window.scrollTo(0, document.body.scrollHeight);
+        });
+        
+        // Wait for content to load
+        await delay(2000);
+        
+        // Get current height
+        const newHeight = await page.evaluate(() => document.body.scrollHeight);
+        
+        console.log(`Scroll attempt ${scrollAttempts + 1}: Height ${previousHeight} -> ${newHeight}`);
+        
+        // Break if no new content loaded
+        if (newHeight === previousHeight) {
+          console.log('No more content to load. Scrolling complete.');
+          break;
+        }
+        
+        previousHeight = newHeight;
+        scrollAttempts++;
+      }
+      
+      if (scrollAttempts >= maxScrollAttempts) {
+        console.log('Reached maximum scroll attempts. Proceeding with extraction.');
+      }
+    };
+
+    await scrollToLoadAllContent();
+    
+    // Wait a bit more for any final lazy-loaded content
+    console.log('Waiting for final content to stabilize...');
+    await delay(3000);
+    
+    
     
     console.log('Extracting data from all loaded items...');
     const results = await page.evaluate(() => {
       const data = [];
       const ionItems = document.querySelectorAll('ion-item[se-item]');
+      
+      console.log(`Found ${ionItems.length} ion-item elements`);
       
       ionItems.forEach((item, index) => {
         try {
@@ -60,11 +100,14 @@ async function extractSectorAndChangePercentage(url) {
             changePercent = changePercentElement.textContent.trim();
           }
           
-          data.push({
-            index: index + 1,
-            industry: industryText,
-            changePercent: changePercent
-          });
+          // Only add items with valid industry text
+          if (industryText) {
+            data.push({
+              index: index + 1,
+              industry: industryText,
+              changePercent: changePercent
+            });
+          }
         } catch (error) {
           console.error(`Error processing item ${index + 1}:`, error);
         }
@@ -73,10 +116,10 @@ async function extractSectorAndChangePercentage(url) {
       return data;
     });
     
-    console.log(`Found ${results.length} items total`);
+    console.log(`Successfully extracted ${results.length} sector items`);
     return results;
   } catch (error) {
-    console.error('An error occurred:', error);
+    console.error('An error occurred during extraction:', error);
     throw error;
   } finally {
     await browser.close();
@@ -84,124 +127,77 @@ async function extractSectorAndChangePercentage(url) {
   }
 }
 
-async function improvedInfiniteScroll(page) {
-  console.log('Starting manual-like scrolling...');
-  
-  let scrollAttempts = 0;
-  const maxScrollAttempts = 50;
-  let previousItemCount = 0;
-  
-  while (scrollAttempts < maxScrollAttempts) {
-    scrollAttempts++;
-    console.log(`Scroll attempt #${scrollAttempts}`);
-    
-    // Get current item count
-    const currentItemCount = await page.evaluate(() => {
-      return document.querySelectorAll('ion-item[se-item]').length;
-    });
-    console.log(`Current items loaded: ${currentItemCount}`);
-    
-    // Scroll down in smaller increments to trigger lazy loading
-    for (let i = 0; i < 10; i++) {
-      // Scroll down by 200px
-      await page.evaluate(() => {
-        window.scrollBy(0, 200);
-      });
-      
-      // Wait a bit between small scrolls
-      await delay(1000);
-    }
-    
-    // Wait for content to load
-    await delay(3000);
-    
-    // Get new item count
-    const newItemCount = await page.evaluate(() => {
-      return document.querySelectorAll('ion-item[se-item]').length;
-    });
-    
-    console.log(`Items after scroll: ${newItemCount}`);
-    
-    // Check if we got new items
-    if (newItemCount > currentItemCount) {
-      console.log(`Found ${newItemCount - currentItemCount} new items`);
-      previousItemCount = newItemCount;
-    } else {
-      console.log('No new items loaded, trying different scroll...');
-      
-      // Try scrolling to specific items
-      await page.evaluate(() => {
-        const items = document.querySelectorAll('ion-item[se-item]');
-        if (items.length > 0) {
-          const lastItem = items[items.length - 1];
-          lastItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }
-      });
-      
-      await delay(3000);
-    }
-    
-    // Check if we've reached the end
-    const isAtBottom = await page.evaluate(() => {
-      return window.innerHeight + window.scrollY >= document.body.scrollHeight;
-    });
-    
-    if (isAtBottom) {
-      console.log('Reached bottom of page');
-      break;
-    }
-  }
-  
-  console.log('Finished scrolling');
-}
-
 async function main() {
   const targetUrl = 'https://web.stockedge.com/sectors';
   try {
+    console.log('Starting sector data extraction...');
     const data = await extractSectorAndChangePercentage(targetUrl);
     
     console.log('\nExtraction complete!');
     console.log('='.repeat(50));
     
-    console.table(data.map(item => ({
-      '#': item.index,
-      'Sector/Industry': item.industry,
-      'Change %': item.changePercent
-    })));
-    
-    for (const item of data) {
-      // Fixed field names to match what the API expects
-      const wpData = { 
-        industry: item.industry,
-        change_percent: item.changePercent // Fixed to use changePercent from extracted data
-      };
+    if (data && data.length > 0) {
+      console.table(data.map(item => ({
+        '#': item.index,
+        'Sector/Industry': item.industry,
+        'Change %': item.changePercent
+      })));
       
-      const stored = await storeInWordPress(wpData);
-      if (stored) {
-        console.log(`Successfully stored "${item.industry}" in WordPress.`);
-      } else if (stored?.duplicate) {
-        console.log(`Skipped duplicate: "${item.industry}" `);
-      } else {
-        console.log(`Failed to store "${item.industry}" in WordPress.`);
+      console.log(`\nStarting WordPress storage for ${data.length} items...`);
+      let successCount = 0;
+      let duplicateCount = 0;
+      let errorCount = 0;
+      
+      for (const item of data) {
+        const wpData = { 
+          industry: item.industry,
+          change_percent: item.changePercent
+        };
+        
+        const stored = await storeInWordPress(wpData);
+        if (stored === true) {
+          successCount++;
+          console.log(`✓ Successfully stored "${item.industry}"`);
+        } else if (stored?.duplicate) {
+          duplicateCount++;
+          console.log(`⚠ Skipped duplicate: "${item.industry}"`);
+        } else {
+          errorCount++;
+          console.log(`✗ Failed to store "${item.industry}"`);
+        }
+        
+        // Small delay between API calls to be respectful
+        await delay(500);
       }
+      
+      console.log('\n' + '='.repeat(50));
+      console.log('SUMMARY:');
+      console.log(`Total items processed: ${data.length}`);
+      console.log(`Successfully stored: ${successCount}`);
+      console.log(`Duplicates skipped: ${duplicateCount}`);
+      console.log(`Errors: ${errorCount}`);
+      console.log('='.repeat(50));
+    } else {
+      console.log('No data extracted. Please check the selectors or website structure.');
     }
 
     return data;
     
   } catch (error) {
     console.error('Failed to extract data:', error);
+    process.exit(1);
   }
 }
 
 async function storeInWordPress(data) {
   try {
-    console.log('Sending to WordPress API:', data);
     const response = await axios.post(wpApiUrl, {
       industry: data.industry,
       change_percent: data.change_percent
+    }, {
+      timeout: 10000 // 10 second timeout
     });
 
-    console.log('Stored in WordPress:', response.data);
     return response.data.status === 'duplicate' ? { duplicate: true } : true;
   } catch (error) {
     console.error('WP API Error:', error.response?.data || error.message);
