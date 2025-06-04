@@ -14,7 +14,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function extractSectorAndChangePercentage(url) { 
   console.log('Launching browser...');
   const browser = await puppeteer.launch({
-    headless: false,
+    headless: true,
     defaultViewport: { width: 1200, height: 800 },
     timeout: 0,
     args: [
